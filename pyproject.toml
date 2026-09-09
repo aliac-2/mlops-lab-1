@@ -7,7 +7,9 @@ authors = [
     { name = "aliac-2", email = "ali.abouchakrai5@gmailcom" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pillow>=12.3.0",
+]
 
 [project.scripts]
 mlops-lab-1 = "mlops_lab_1:main"
@@ -18,5 +20,5 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "dvc>=3.67.1",
+    "dvc[s3]>=3.67.1",
 ]
