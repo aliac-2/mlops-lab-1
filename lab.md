@@ -19,24 +19,27 @@ These files define the Python project structure and help make the environment re
 
 ### What are the created files? What do you think they are used for? And which ones should be pushed to Git?
 
-Running `dvc init` creates DVC configuration files, mainly:
+Running `dvc init` creates DVC configuration and metadata files, mainly:
 
 - `.dvc/config`: contains the DVC project configuration, such as the configured data remote.
-- `.dvc/.gitignore`: prevents DVC internal cache and temporary files from being tracked by Git.
+- `.dvc/.gitignore`: prevents internal DVC cache and temporary files from being tracked by Git.
 - `.dvcignore`: tells DVC which files or folders it should ignore.
 
 The DVC configuration and metadata files should be pushed to Git so that other users can reproduce the same DVC setup.
 
-The DVC cache, temporary files, and actual dataset files should not be pushed to Git.
+The DVC cache, temporary files, and actual dataset files should not be pushed directly to Git.
+
+---
 
 ## Question 3
 
 ### Where are the credentials stored? What are the options other than `--global`? Should the credentials be pushed to GitHub?
 
-The credentials configured using `--global` are stored in the user's global DVC configuration outside the Git repository.
+Credentials configured using `--global` are stored in the user's global DVC configuration outside the Git repository.
 
 Other configuration scopes include:
-- Project configuration, when no scope option is specified.
+
+- Project/repository configuration when no scope option is specified.
 - `--local`, which stores configuration locally for the current repository and is not tracked by Git.
 - `--system`, which stores configuration system-wide.
 
@@ -54,7 +57,7 @@ After running `dvc add data`, DVC added:
 
 to the `.gitignore` file.
 
-This prevents Git from tracking the actual dataset because the data is now managed by DVC. Git only tracks the DVC metadata and pointer files.
+This prevents Git from tracking the actual contents of the `data` directory because the data is now managed by DVC. Git tracks the DVC metadata and pointer files instead.
 
 ---
 
@@ -66,15 +69,14 @@ Yes. A `data.dvc` file was created.
 
 It contains metadata about the tracked `data` directory, including:
 
-- The MD5 hash of the dataset version.
+- The hash of the tracked data version.
 - The total size of the data.
 - The number of files.
 - The path to the tracked directory.
 
-In our case, DVC detected 16,643 files and tracks the `data` directory.
+The `data.dvc` file does not contain the dataset itself. It acts as a pointer to the specific version of the data managed by DVC.
 
-The `data.dvc` file acts as a pointer to the actual dataset managed by DVC.
-
+---
 
 ## Question 6
 
@@ -82,24 +84,36 @@ The `data.dvc` file acts as a pointer to the actual dataset managed by DVC.
 
 Yes, the code and DVC metadata files are available on GitHub.
 
-The actual dataset is not stored directly in GitHub because the `data` directory is ignored by Git.
+The actual contents of the `data` directory are not stored directly in GitHub because the directory is ignored by Git and managed by DVC.
 
-The `data.dvc` file is stored in GitHub and acts as a pointer to the version of the dataset tracked by DVC.
+The `data.dvc` file is stored in GitHub and acts as a pointer to the version of the data tracked by DVC.
 
-After running `dvc push`, the actual data is uploaded to the DagsHub DVC remote and can be accessed from DagsHub.
+After running `dvc push`, the DVC-tracked data was successfully uploaded to the DagsHub remote.
+
+---
 
 ## Question 7
 
-After cloning the GitHub repository into a new folder, the actual data is not downloaded by Git because the `data` directory is managed by DVC.
+### In a completely new temporary folder, clone your GitHub repository. Do you see the data folder? What DVC command is needed to get the data folder?
 
-The command needed to retrieve the tracked data is:
+A normal `git clone` retrieves the Git-tracked project files and the `data.dvc` pointer, but it does not retrieve the actual DVC-managed data.
+
+The command needed to retrieve the data referenced by `data.dvc` is:
 
 `dvc pull`
 
-This downloads the data version referenced by `data.dvc` from the configured DVC remote.
+This downloads the required data version from the configured DVC remote.
+
+---
 
 ## Question 8
 
-No. After checking out the older Git commit and running `dvc checkout`, the `food11_processed` and `food11_processed_mini` folders are no longer present.
+### Do you still see the new folders you created, `food11_processed` and `food11_processed_mini`?
 
-This happens because the older `data.dvc` file points to the earlier version of the data that only contained `food11_raw`.
+No.
+
+After checking out the older Git commit and running `dvc checkout`, the `food11_processed` and `food11_processed_mini` folders were no longer present, and only the earlier data version remained.
+
+This happens because the older `data.dvc` file points to the previous version of the dataset that only contained `food11_raw`.
+
+After switching back to `main` and running `dvc checkout` again, the processed folders were restored.
