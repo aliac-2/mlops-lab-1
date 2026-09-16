@@ -1,2 +1,4 @@
 /data
 /food11_raw.zip
+mlflow.db
+mlruns/
