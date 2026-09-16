@@ -117,3 +117,64 @@ After checking out the older Git commit and running `dvc checkout`, the `food11_
 This happens because the older `data.dvc` file points to the previous version of the dataset that only contained `food11_raw`.
 
 After switching back to `main` and running `dvc checkout` again, the processed folders were restored.
+
+---
+
+# Lab 2 - Model Training and Experiment Tracking
+
+## Question 1: What changed in pyproject.toml and uv.lock?
+
+`pyproject.toml` was updated with four new dependencies:
+mlflow, torch, torchvision, and scikit-learn.
+
+We also configured a CPU-only PyTorch index.
+
+`uv.lock` was updated with the exact resolved package
+versions and their dependencies to make installations reproducible.
+
+## Question 2: What are the backend store and artifact root?
+
+`--backend-store-uri sqlite:///mlflow.db` configures the SQLite database used to store MLflow metadata, including experiments, runs, parameters, metrics, and artifact locations.
+
+`--default-artifact-root ./mlruns` specifies the default location for storing artifacts, such as trained models and output files, for experiments created with that artifact location.
+
+Metadata describes a training run and records its results, while artifacts are the actual files produced by the run.
+
+### Question 3: Why shouldn't mlflow.db and mlruns/ be tracked by Git or DVC?
+
+`mlflow.db` and `mlruns/` contain local MLflow tracking data and artifacts generated during experiments.
+
+They should not be tracked by Git because they can change frequently and contain large binary files, creating unnecessary repository history.
+
+They should not be tracked by DVC either because MLflow already manages experiment metadata, metrics, and artifacts. Tracking these local MLflow outputs again with DVC would duplicate their management.
+
+Git is used to version our training code, DVC is used to version our datasets, and MLflow is used to track our training experiments.
+
+### Question 4: What happens when set_experiment is called with a new name?
+
+When `mlflow.set_experiment("food11")` is called for the first time, MLflow automatically creates a new experiment because it does not exist yet. It assigns the experiment a unique ID and makes it the active experiment for subsequent runs in that process.
+
+In our case, MLflow created the `food11` experiment with ID `2`. The experiment is now visible in the MLflow UI.
+
+### Question 5: What is the difference between mlflow.log_param and mlflow.log_metric? Why does log_metric take a step argument?
+
+`mlflow.log_param` records fixed training settings, such as the learning rate, batch size, and number of epochs.
+
+`mlflow.log_metric` records numerical results, such as training loss and validation accuracy, which can change during training.
+
+The `step` argument identifies the epoch or iteration associated with each metric value, allowing MLflow to plot its evolution. Parameters do not require a step because they are fixed for the run.
+
+
+### Question 6: Where does the model artifact actually live on disk?
+
+MLflow stores parameters and metrics as run metadata in the SQLite backend (`mlflow.db`), while model artifacts are stored as files.
+
+In our experiment, the run artifact URI is:
+
+`C:/Users/Ali/Desktop/mlops-lab-1/mlruns/2/8f35db59c5024ea3ae9e92e8f1a9dd80/artifacts`
+
+However, MLflow 3 stores our logged model separately, at:
+
+`C:/Users/Ali/Desktop/mlops-lab-1/mlruns/2/models/m-43b42fa9ccd044b4b336861cd0544db7/artifacts`
+
+The model's exact location was verified using `mlflow.get_logged_model()`.
