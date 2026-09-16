@@ -1,0 +1,6 @@
+outs:
+- md5: aabf41e726cd2b58d083bc1d40e36d96.dir
+  size: 73989644
+  nfiles: 16643
+  hash: md5
+  path: food11_processed

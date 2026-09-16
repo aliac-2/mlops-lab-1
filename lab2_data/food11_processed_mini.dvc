@@ -1,0 +1,6 @@
+outs:
+- md5: 51ef987543a503a107cf5693b1fe91e6.dir
+  size: 14805156
+  nfiles: 3292
+  hash: md5
+  path: food11_processed_mini

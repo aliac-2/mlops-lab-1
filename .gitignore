@@ -2,5 +2,5 @@
 /food11_raw.zip
 mlflow.db
 mlruns/
-/lab2_data/
+/lab2_data/food11_raw/
 __pycache__/
