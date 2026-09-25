@@ -213,7 +213,7 @@ Its final test accuracy was 72.54%. We will retain this run ID for Lab 3.
 
 ### What version number was your model given? What's the difference between a run's logged model artifact and a registered model?
 
-The model was registered under the name `food11` and was given version **1**.
+The model was registered under the name `food11` and was given version **2**.
 
 A run's logged model artifact is the model produced and stored as an artifact belonging to a specific MLflow run. A registered model is a named model in the MLflow Model Registry that has its own version numbers and can be managed independently from the run that produced it.
 
@@ -227,7 +227,7 @@ MLflow uses aliases such as `champion` and `challenger` instead of the old built
 
 Versioning a model separately from the run allows multiple versions of the same registered model to be managed independently from the experiments that produced them.
 
-An alias is more flexible because it can be moved from one model version to another without changing the version number itself. For example, the `champion` alias can point to version 1 and later be reassigned to version 2 without changing either version.
+An alias is more flexible because it can be moved from one model version to another without changing the version number itself. For example, the `champion` alias can point to one model version and later be reassigned to another version without changing the version numbers.
 
 ---
 
@@ -253,17 +253,17 @@ If only a line in `serve.py` changes, Docker can reuse the cached dependency lay
 
 ## Question 5
 
-### What's the size difference between a naive single-stage image and your multi-stage one? Use `docker history <image>` to see which layers are the biggest.
+### What's the size difference between a naive single-stage image and your multi-stage one? Use `docker history <image>` to see which layers are the biggest?
 
-Our multi-stage Docker image `food11-api:latest` has a disk usage of approximately **1.99 GB**.
+The multi-stage Docker image `food11-api:latest` has a disk usage of approximately **1.99 GB**, while the naive single-stage image `food11-api:single-stage` has a disk usage of approximately **2.17 GB**.
 
-The largest layer shown by `docker history` is the copied Python virtual environment:
+Therefore, the multi-stage image is approximately **0.18 GB (180 MB) smaller**, or about **8.3% smaller** than the single-stage image.
 
-`COPY /app/.venv /app/.venv` — approximately **1.43 GB**.
+The `docker history` output shows that the largest layer in the single-stage image is the virtual environment created by `uv sync`, at approximately **1.48 GB**. The single-stage image also contains an approximately **82.5 MB** layer for installing `uv`.
 
-The current image also contains the Python/Debian base image and system packages.
+In the multi-stage image, the virtual environment is copied from the builder stage into the runtime image, with the corresponding layer being approximately **1.43 GB**.
 
-An exact numerical size difference from a naive single-stage image was not measured because we did not build a separate naive single-stage image. Therefore, no exact single-stage size difference is claimed.
+This demonstrates that the multi-stage build avoids keeping unnecessary builder-related layers in the final runtime image.
 
 ---
 
@@ -295,13 +295,15 @@ to connect the containerized API to the MLflow server running on the host.
 
 ### Stop the container and start a new one from the same image. Does the model still load correctly without you rebuilding? What does that tell you about what's baked into the image versus fetched at runtime?
 
-Yes. We stopped the original container and created a new container from the same `food11-api:latest` image without rebuilding the image.
+Yes. We stopped the original container and started a new container from the same `food11-api:latest` image without rebuilding the image.
 
 The new container successfully loaded the model and the health endpoint returned:
 
 `{"status":"ok"}`
 
-This shows that the application code and Python dependencies are contained in the Docker image, while the model is fetched from MLflow at runtime.
+The prediction endpoint also successfully returned a prediction for an input image.
+
+This shows that the application code and Python dependencies are contained in the Docker image, while the model is loaded from MLflow at runtime.
 
 In our local setup, the MLflow model artifacts are stored in the local `mlruns` directory, so that directory was mounted into the new container at runtime.
 
@@ -314,4 +316,5 @@ In our local setup, the MLflow model artifacts are stored in the local `mlruns` 
 The Docker image currently exists only in the local Docker environment. To allow another machine, CI runner, or Kubernetes cluster to pull and run the exact image, the image should be pushed to a container registry such as Docker Hub or GitHub Container Registry.
 
 A specific version tag or image digest should also be used instead of relying only on the mutable `latest` tag so that the exact image version can be identified and reproduced.
+
 
