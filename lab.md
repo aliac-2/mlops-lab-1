@@ -206,3 +206,112 @@ Run ID: `7c2f2a7aa7344fb8bfeb26c2f9d1dd3c`
 
 Its final test accuracy was 72.54%. We will retain this run ID for Lab 3.
 
+
+# MLOps Lab 3 - Questions and Answers
+
+## Question 1
+
+### What version number was your model given? What's the difference between a run's logged model artifact and a registered model?
+
+The model was registered under the name `food11` and was given version **1**.
+
+A run's logged model artifact is the model produced and stored as an artifact belonging to a specific MLflow run. A registered model is a named model in the MLflow Model Registry that has its own version numbers and can be managed independently from the run that produced it.
+
+---
+
+## Question 2
+
+### What aliases replaced the old built-in stages in MLflow? Why version a model separately from the run that produced it, and why is an alias more flexible than a fixed stage name?
+
+MLflow uses aliases such as `champion` and `challenger` instead of the old built-in stages such as `Staging` and `Production`.
+
+Versioning a model separately from the run allows multiple versions of the same registered model to be managed independently from the experiments that produced them.
+
+An alias is more flexible because it can be moved from one model version to another without changing the version number itself. For example, the `champion` alias can point to version 1 and later be reassigned to version 2 without changing either version.
+
+---
+
+## Question 3
+
+### Why load the model through an MLflow model URI (`models:/food11@champion`) instead of pointing directly at the `.pth` file on disk? What would you have to change to serve a newer model version?
+
+Using the MLflow model URI allows the application to load the model through the MLflow Model Registry instead of depending on a specific `.pth` file path. This makes model serving independent from the physical location of the model file and allows MLflow to manage the model version and metadata.
+
+To serve a newer model version, the `champion` alias can be moved to the newer registered model version. The serving code can continue using `models:/food11@champion` without changing the model-loading code.
+
+---
+
+## Question 4
+
+### Why copy `pyproject.toml`/`uv.lock` and run `uv sync` before copying the rest of the source code, instead of copying everything at once? What happens to the build cache when you only change a line in `serve.py`?
+
+The dependency files are copied and `uv sync` is run before copying the source code so that the dependency installation layer can be cached separately from the application source code.
+
+If only a line in `serve.py` changes, Docker can reuse the cached dependency layers and only rebuild the layers affected by the source-code change. This makes subsequent builds faster.
+
+---
+
+## Question 5
+
+### What's the size difference between a naive single-stage image and your multi-stage one? Use `docker history <image>` to see which layers are the biggest.
+
+Our multi-stage Docker image `food11-api:latest` has a disk usage of approximately **1.99 GB**.
+
+The largest layer shown by `docker history` is the copied Python virtual environment:
+
+`COPY /app/.venv /app/.venv` — approximately **1.43 GB**.
+
+The current image also contains the Python/Debian base image and system packages.
+
+An exact numerical size difference from a naive single-stage image was not measured because we did not build a separate naive single-stage image. Therefore, no exact single-stage size difference is claimed.
+
+---
+
+## Question 6
+
+### What happens to build speed and image size if you forget the `.dockerignore`? Which of the excluded folders would actually break the build if they were sent to the Docker daemon?
+
+Without `.dockerignore`, unnecessary files such as `.venv/`, `data/`, `lab2_data/`, `mlruns/`, `.git/`, and Python cache files would be included in the Docker build context. This can make sending the build context slower and use more disk space.
+
+With the current Dockerfile, these folders would not directly break the build because the Dockerfile only copies the required dependency files and the `src/` directory. However, sending large datasets, MLflow artifacts, and the local virtual environment is unnecessary and wastes resources.
+
+---
+
+## Question 7
+
+### Why can't the container simply use `127.0.0.1:5000` to reach the MLflow server on your host? What does `host.docker.internal` resolve to?
+
+Inside a Docker container, `127.0.0.1` refers to the container itself, not to the host machine. Therefore, `127.0.0.1:5000` would look for an MLflow server running inside the container.
+
+On Docker Desktop for Windows, `host.docker.internal` is a special hostname that allows a container to reach services running on the host machine. Therefore, we used:
+
+`http://host.docker.internal:5000`
+
+to connect the containerized API to the MLflow server running on the host.
+
+---
+
+## Question 8
+
+### Stop the container and start a new one from the same image. Does the model still load correctly without you rebuilding? What does that tell you about what's baked into the image versus fetched at runtime?
+
+Yes. We stopped the original container and created a new container from the same `food11-api:latest` image without rebuilding the image.
+
+The new container successfully loaded the model and the health endpoint returned:
+
+`{"status":"ok"}`
+
+This shows that the application code and Python dependencies are contained in the Docker image, while the model is fetched from MLflow at runtime.
+
+In our local setup, the MLflow model artifacts are stored in the local `mlruns` directory, so that directory was mounted into the new container at runtime.
+
+---
+
+## Question 9
+
+### The Dockerfile and image are versioned differently — one lives in git, the other doesn't (yet). What's still missing before another machine (like a CI runner or a Kubernetes cluster) could reliably pull and run the exact image you just built?
+
+The Docker image currently exists only in the local Docker environment. To allow another machine, CI runner, or Kubernetes cluster to pull and run the exact image, the image should be pushed to a container registry such as Docker Hub or GitHub Container Registry.
+
+A specific version tag or image digest should also be used instead of relying only on the mutable `latest` tag so that the exact image version can be identified and reproduced.
+
