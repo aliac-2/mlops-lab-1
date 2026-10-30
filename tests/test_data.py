@@ -9,8 +9,7 @@ from src.food11.data import (
 
 
 def test_category_from_filename():
-    # Intentionally wrong answer to demonstrate failing CI.
-    assert category_from_filename("0_12.jpg") == "Pizza"
+    assert category_from_filename("0_12.jpg") == "Bread"
     assert category_from_filename("10_3.jpg") == "Vegetable-Fruit"
 
 
