@@ -19,7 +19,7 @@ mlflow.set_experiment("food11")
 
 def load_data(dataset_name, batch_size):
     dataset_dir = DATA_ROOT / (
-        "food11_processed_mini"
+        "food11_processed_mini_clean"
         if dataset_name == "mini"
         else "food11_processed"
     )
