@@ -1,5 +1,6 @@
 
 from pathlib import Path
+
 import data as food11_data
 
 # Project root: mlops-lab-1

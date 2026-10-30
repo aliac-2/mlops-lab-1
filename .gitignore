@@ -4,3 +4,5 @@ mlflow.db
 mlruns/
 /lab2_data/food11_raw/
 __pycache__/
+
+/lab2_data/food11_processed_mini_clean/
