@@ -423,3 +423,183 @@ We also corrected the confidence calculation using softmax because the model ret
 Lab 4 successfully deployed the Food-11 application using Docker Compose with MLflow, FastAPI, and Streamlit. We verified model serving, model version switching, service communication, and persistent storage.
 
 
+---
+
+# MLOps Lab 5 — CI/CD with GitHub Actions
+
+## Question 1 — Why should unit tests avoid loading the real MLflow model?
+
+Unit tests should be fast, isolated, and deterministic. Loading the real model would introduce external dependencies unrelated to the code being tested.
+
+The tests could fail because the MLflow server is unavailable, because network access or authentication fails, or because the model artifacts cannot be accessed. Loading the real model is also much slower than using a fake model.
+
+We used `SKIP_MODEL=1` to avoid loading MLflow during testing.
+
+## Question 2 — What does the fake-model API test prove, and what does it not prove?
+
+The fake-model test confirms that FastAPI accepts an uploaded image, applies preprocessing, calls the model's `predict()` method, and returns a valid JSON response with `class_id` and a confidence value between 0 and 1.
+
+It also checks that the predicted class is 0, corresponding to Bread.
+
+However, it does not prove that the real trained model is accurate, that MLflow can load model artifacts, or that the actual inference pipeline behaves correctly with the registered model.
+
+Our local tests passed: **5 tests passed**, with four deprecation warnings.
+
+## Question 3 — Which check caught the duplicate, and why is data leakage dangerous?
+
+The **No duplicates across splits** check detected the copied image by comparing MD5 hashes of image contents.
+
+We created a temporary duplicate from `training/Bread` in `evaluation/Bread`. The validator reported `FAIL` for cross-split duplicates.
+
+After removing the duplicate, all five validation checks passed.
+
+A duplicate between training and evaluation is dangerous because the model may be evaluated on images it has already seen, artificially increasing the reported test accuracy. Unlike a corrupted image, which may crash training and expose the issue immediately, data leakage can remain unnoticed and produce misleading results.
+
+The original mini dataset also contained cross-split duplicates. We created and validated a separate cleaned copy without modifying the original DVC-managed data.
+
+## Question 4 — Where should data validation run when CI cannot access DVC data?
+
+Two appropriate places are:
+
+1. In a data preparation or training pipeline after retrieving the dataset from its DVC remote, before training starts.
+2. On a self-hosted CI runner or a scheduled validation job that has access to the DVC remote and its credentials.
+
+This ensures the contract is checked even when GitHub-hosted runners cannot access the dataset.
+
+## Question 5 — What does `needs: test` do?
+
+The `smoke` job declares `needs: test`, so it only runs after the `test` job succeeds.
+
+If a unit test fails, the smoke job is skipped. Without `needs`, GitHub Actions could start both jobs independently, wasting resources building a Docker image from code that has already failed tests.
+
+We confirmed this behavior during our intentionally failing CI experiment.
+
+## Question 6 — Compare the first and second CI runs.
+
+The first GitHub Actions run completed successfully in **2 minutes 8 seconds**.
+
+We then pushed an empty commit using `git commit --allow-empty -m "ci"`. The second run also passed and completed in **2 minutes 2 seconds**.
+
+The second run was 6 seconds faster. Dependency caching may have contributed, but we did not measure individual step durations, so we cannot definitively attribute the improvement to one step. Runner scheduling and Docker build time can also affect the total duration.
+
+## Question 7 — Why tag Docker images with the Git commit SHA instead of `latest`?
+
+A commit SHA uniquely identifies the source-code revision used to build an image.
+
+The `latest` tag is mutable. For example, machine A could pull `latest` on Monday, while machine B pulls `latest` after a new build on Tuesday. Both machines would report using `latest`, even though their application code differs.
+
+By using the full commit SHA, we can identify and retrieve the exact image associated with a particular Git revision.
+
+Our image was successfully published to GHCR and downloaded using:
+
+`ghcr.io/aliac-2/mlops-lab-1:55564b5c3a6e175b0300b6e6f201bee3ddb44396`
+
+## Question 8 — Why declare GitHub Actions token permissions explicitly?
+
+The image publishing job requires `packages: write` to upload container images to GitHub Container Registry and `contents: read` to access repository contents.
+
+Declaring these permissions follows the principle of least privilege.
+
+If a compromised workflow step received an excessively powerful token, it might modify repository contents, delete packages, change workflows, or otherwise abuse whatever permissions the token granted.
+
+## Question 9 — What happened in the failing pull request?
+
+We created the branch `lab5-failing-test` and intentionally changed a test expectation from `Bread` to `Pizza`.
+
+GitHub Actions detected the failure, and the dependent smoke job was skipped.
+
+We then corrected the test, pushed a new commit, and confirmed the CI checks passed. The pull request was merged into `main` successfully.
+
+Compared with relying on developers to run tests manually, required CI checks give the team a consistent, automated way to detect regressions before merging code.
+
+## Question 10 — What decisions did the model quality gate make?
+
+Our current champion was registered model **Version 1**, with test accuracy **70.26%**.
+
+We used an evaluation split of **1,096 images** and calculated:
+
+\[
+SE = \sqrt{\frac{p(1-p)}{n}}
+\]
+
+With champion accuracy \(p = 0.7026\), the standard error was approximately **0.0138**, so \(2SE\) represented **2.76 percentage points**.
+
+The minimum candidate accuracy required for promotion was approximately **73.02%**.
+
+| Candidate | Learning rate | Test accuracy | Gate decision |
+|---|---|---|---|
+| Version 3 | 0.0001 | 38.77% | Rejected |
+| Version 4 | 0.01 | 72.51% | Rejected |
+
+Both candidates failed to reach the threshold.
+
+The `champion` alias remained assigned to Version 1. The `challenger` alias was assigned to the latest rejected candidate, Version 4.
+
+Our `promote.py` script also recorded the decisions and relevant accuracy values as model-version tags in MLflow.
+
+## Question 11 — How could model promotion run automatically?
+
+One solution is to run promotion on a **self-hosted GitHub Actions runner** located on the same network as the MLflow server. That runner would have access to the model registry and could execute the quality gate after training.
+
+A second solution is to move MLflow to an accessible hosted service such as DagsHub or another authenticated remote MLflow deployment. A CI workflow could then call `promote.py` securely using stored credentials.
+
+## Question 12 — Diagram of the CI/CD pipeline
+
+```text
+Developer
+   |
+   | git push / pull request
+   v
+GitHub Actions                 [AUTOMATIC]
+   |
+   v
+test job
+  - Install dependencies
+  - Ruff linting
+  - Pytest unit/API tests
+   |
+   | only when successful
+   v
+smoke job
+  - Build Docker image
+  - Start FastAPI with SKIP_MODEL=1
+  - Probe /health
+   |
+   | only on main
+   v
+push job
+  - Authenticate to GHCR
+  - Publish Docker image
+  - Tag image with Git commit SHA   [CODE VERSION]
+   |
+   v
+GHCR image
+   |
+   | manual pull and deployment
+   v
+Running inference container
+   |
+   | load models:/food11@champion at startup
+   v
+MLflow Model Registry           [MODEL VERSION]
+   ^
+   |
+Training and evaluation         [MANUAL]
+   |
+   v
+promote.py quality gate         [MANUAL TRIGGER]
+  - Compare candidate against champion
+  - Promote or assign challenger
+  - Record decision tags
+```
+
+The code version is selected through the Git commit SHA during the automatic image publishing stage.
+
+The model version is selected independently through the MLflow `champion` alias.
+
+CI linting, testing, Docker smoke testing, and publishing to GHCR are automatic. Model training, triggering promotion, and deploying the image remain manual in our current setup.
+
+## Conclusion
+
+Lab 5 successfully introduced automated GitHub Actions testing, Docker smoke testing, and image publishing to GitHub Container Registry. We also implemented dataset validation, demonstrated prevention of data leakage, tested pull request checks, and implemented a statistical model promotion quality gate.
+
