@@ -317,4 +317,109 @@ The Docker image currently exists only in the local Docker environment. To allow
 
 A specific version tag or image digest should also be used instead of relying only on the mutable `latest` tag so that the exact image version can be identified and reproduced.
 
+---
+
+# MLOps Lab 4 — Orchestrating the App with Docker Compose
+
+## Question 1 — What happens without a mounted volume?
+
+Without a mounted volume, everything written to `/mlflow-data` is stored in the container's writable filesystem. Stopping and restarting the same container preserves that data, but removing it deletes the writable layer. A new container therefore starts without the previous MLflow database or artifacts.
+
+## Question 2 — Why use a named volume instead of a bind mount?
+
+A named volume is managed by Docker and persists independently of the container. It is convenient for application data and does not depend on a specific host directory.
+
+A bind mount would also work, but it requires managing the host path and permissions.
+
+## Question 3 — Why does `mlflow` resolve inside Docker Compose?
+
+Docker Compose creates a private network with built-in DNS. Services can communicate using their service names, so `mlflow` resolves to the MLflow container.
+
+In Lab 3, MLflow ran directly on the host machine, which required `host.docker.internal` to reach it from inside Docker.
+
+## Question 4 — Why use `INFERENCE_URL`?
+
+The environment variable allows the frontend to connect to different inference endpoints without changing its source code.
+
+Inside Compose, it uses `http://inference:8000`. Outside Compose, it can use another reachable address.
+
+## Question 5 — Why doesn't inference publish port 8000?
+
+The frontend communicates with the inference service through Docker Compose's internal network using `http://inference:8000`.
+
+Therefore, inference does not need a published host port.
+
+## Question 6 — What happens when MLflow isn't ready?
+
+`depends_on` ensures startup order but does not guarantee readiness.
+
+If inference attempts to load the model before MLflow is ready, application startup may fail and the container may exit. Health checks or retry logic can solve this problem.
+
+## Question 7 — Which services publish ports?
+
+Our `docker compose ps` output confirmed:
+
+- MLflow: `5000:5000` — published.
+- Frontend: `8501:8501` — published.
+- Inference: `8000/tcp` — internal only.
+
+This matches the Compose configuration.
+
+## Question 8 — What happens after promoting a model?
+
+Initially, the `champion` alias pointed to `food11` Version 2.
+
+We reassigned the alias to Version 1. After restarting inference with `docker compose restart inference`, FastAPI loaded Version 1 instead of Version 2.
+
+Using the same food image, our observed results were:
+
+- Version 2: Class 0, confidence 64.3%.
+- Version 1 after restart: Class 0, confidence 32.2%.
+
+Restarting inference allowed it to use the updated model alias.
+
+## Question 9 — Why does restart work without rebuilding?
+
+The Docker image contains the application code and dependencies, while the registered model is loaded from MLflow during application startup.
+
+Restarting the inference container reloads the model currently assigned to the `champion` alias without rebuilding the image.
+
+## Question 10 — What happens with `down` versus `down -v`?
+
+We ran `docker compose down` followed by `docker compose up -d`.
+
+All three services restarted successfully, and MLflow still contained the `food11` model with the `champion` alias assigned to Version 1.
+
+This confirms that the named volume preserved the database and model artifacts.
+
+For the `down -v` test, we used an isolated Compose project with an Alpine container and a temporary named volume to avoid deleting our main MLflow data.
+
+After removing the volume and recreating the container, the test returned:
+
+`FILE_MISSING`
+
+This demonstrates that `down -v` removes Compose-managed volumes and their stored data.
+
+## Question 11 — What would change for scaling and high availability?
+
+Docker Compose is primarily designed for a single host.
+
+To run multiple inference replicas across machines with load balancing and automatic failover, we would use an orchestration platform such as Kubernetes.
+
+For MLflow high availability, we would use an external database such as PostgreSQL and shared artifact storage such as S3 or MinIO, allowing multiple MLflow instances to run behind a load balancer.
+
+## Additional Implementation Notes
+
+Our original MLflow database contained Windows artifact paths, so we created a backup and migrated the database and artifacts into a Docker named volume.
+
+We updated the artifact paths for Linux and shared the MLflow volume with the inference container.
+
+The frontend was adjusted to use the actual FastAPI response fields, `class_id` and `confidence`.
+
+We also corrected the confidence calculation using softmax because the model returned raw logits. The final end-to-end test successfully displayed a prediction with a valid confidence percentage.
+
+## Conclusion
+
+Lab 4 successfully deployed the Food-11 application using Docker Compose with MLflow, FastAPI, and Streamlit. We verified model serving, model version switching, service communication, and persistent storage.
+
 
